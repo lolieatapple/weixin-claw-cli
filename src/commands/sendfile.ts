@@ -53,9 +53,14 @@ export async function cmdSendFile(
   else if (mime.startsWith("video/")) typeLabel = "视频";
   else typeLabel = "文件";
 
+  log(`目标: ${to}`);
   log(`正在上传${typeLabel}: ${fileName} (${sizeStr})...`);
 
   const contextToken = await ensureContextToken(account, to);
+  if (!contextToken) {
+    error("无法获取会话 token，请先用微信给机器人发一条消息，再重试");
+    process.exit(1);
+  }
 
   if (mime.startsWith("image/")) {
     const uploaded = await uploadImage(filePath, to, {
