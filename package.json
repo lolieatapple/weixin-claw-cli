@@ -1,6 +1,6 @@
 {
   "name": "weixin-claw-cli",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "WeChat CLI messaging tool - send/receive messages, files, and clipboard content via WeChat from your terminal",
   "type": "module",
   "license": "MIT",
