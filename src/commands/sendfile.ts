@@ -11,9 +11,8 @@ import {
 import {
   loadAccount,
   listAccountIds,
-  createContextTokenStore,
 } from "../auth/store.js";
-import { log, error, ensureAccount } from "../utils.js";
+import { log, error, ensureAccount, ensureContextToken } from "../utils.js";
 
 function resolveBoundUserId(): string | null {
   const ids = listAccountIds();
@@ -56,8 +55,7 @@ export async function cmdSendFile(
 
   log(`正在上传${typeLabel}: ${fileName} (${sizeStr})...`);
 
-  const ctxStore = createContextTokenStore();
-  const contextToken = ctxStore.get(account.accountId, to);
+  const contextToken = await ensureContextToken(account, to);
 
   if (mime.startsWith("image/")) {
     const uploaded = await uploadImage(filePath, to, {

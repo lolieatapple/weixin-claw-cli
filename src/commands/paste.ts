@@ -3,9 +3,8 @@ import { sendMessage } from "../api/client.js";
 import {
   loadAccount,
   listAccountIds,
-  createContextTokenStore,
 } from "../auth/store.js";
-import { log, error, ensureAccount } from "../utils.js";
+import { log, error, ensureAccount, ensureContextToken } from "../utils.js";
 
 function readClipboard(): string {
   const cmd = process.platform === "darwin" ? "pbpaste" : "xclip -selection clipboard -o";
@@ -43,8 +42,11 @@ export async function cmdPaste(): Promise<void> {
     process.exit(1);
   }
 
-  const ctxStore = createContextTokenStore();
-  const contextToken = ctxStore.get(account.accountId, to);
+  const contextToken = await ensureContextToken(account, to);
+  if (!contextToken) {
+    error("无法获取会话 token，请先用微信给机器人发一条消息，再重试");
+    process.exit(1);
+  }
 
   const preview = text.length > 50 ? `${text.slice(0, 50)}...` : text;
   log(`发送剪贴板内容到 ${to}:`);

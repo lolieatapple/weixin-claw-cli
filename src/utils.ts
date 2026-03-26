@@ -1,5 +1,6 @@
-import { resolveAccount } from "./auth/store.js";
+import { resolveAccount, createContextTokenStore, loadSyncBuf, saveSyncBuf } from "./auth/store.js";
 import { loginFlow } from "./auth/login.js";
+import { getUpdates } from "./api/client.js";
 
 const PREFIX = "\x1b[36m[weixin]\x1b[0m";
 
@@ -44,4 +45,46 @@ export async function ensureAccount(): Promise<{
     process.exit(1);
   }
   return account;
+}
+
+/**
+ * Ensure we have a contextToken for the target user.
+ * If not cached on disk, do a quick getUpdates poll to obtain one.
+ */
+export async function ensureContextToken(
+  account: { accountId: string; baseUrl: string; token?: string },
+  to: string,
+): Promise<string | undefined> {
+  const ctxStore = createContextTokenStore();
+  const cached = ctxStore.get(account.accountId, to);
+  if (cached) return cached;
+
+  log("首次发送，正在同步会话信息...");
+  let getUpdatesBuf = loadSyncBuf(account.accountId);
+
+  for (let i = 0; i < 3; i++) {
+    const resp = await getUpdates({
+      baseUrl: account.baseUrl,
+      token: account.token,
+      getUpdatesBuf,
+    });
+
+    if (resp.get_updates_buf) {
+      saveSyncBuf(account.accountId, resp.get_updates_buf);
+      getUpdatesBuf = resp.get_updates_buf;
+    }
+
+    for (const msg of resp.msgs ?? []) {
+      if (msg.context_token && msg.from_user_id) {
+        ctxStore.set(account.accountId, msg.from_user_id, msg.context_token);
+      }
+    }
+
+    const token = ctxStore.get(account.accountId, to);
+    if (token) return token;
+
+    if ((resp.msgs?.length ?? 0) > 0) break;
+  }
+
+  return ctxStore.get(account.accountId, to);
 }
