@@ -3,8 +3,6 @@ import path from "node:path";
 import { sendMediaMessage } from "../api/client.js";
 import { MessageItemType } from "../api/types.js";
 import {
-  uploadImage,
-  uploadVideo,
   uploadFile,
   getMimeFromFilename,
 } from "../api/cdn.js";
@@ -62,78 +60,28 @@ export async function cmdSendFile(
     process.exit(1);
   }
 
-  if (mime.startsWith("image/")) {
-    const uploaded = await uploadImage(filePath, to, {
-      baseUrl: account.baseUrl,
-      token: account.token,
-    });
-    const result = await sendMediaMessage({
-      baseUrl: account.baseUrl,
-      token: account.token,
-      to,
-      text: caption,
-      contextToken,
-      mediaItem: {
-        type: MessageItemType.IMAGE,
-        image_item: {
-          media: {
-            encrypt_query_param: uploaded.downloadEncryptedQueryParam,
-            aes_key: Buffer.from(uploaded.aeskey, "hex").toString("base64"),
-            encrypt_type: 1,
-          },
-          mid_size: uploaded.fileSizeCiphertext,
+  const uploaded = await uploadFile(absPath, to, {
+    baseUrl: account.baseUrl,
+    token: account.token,
+  });
+  const result = await sendMediaMessage({
+    baseUrl: account.baseUrl,
+    token: account.token,
+    to,
+    text: caption,
+    contextToken,
+    mediaItem: {
+      type: MessageItemType.FILE,
+      file_item: {
+        media: {
+          encrypt_query_param: uploaded.downloadEncryptedQueryParam,
+          aes_key: Buffer.from(uploaded.aeskey).toString("base64"),
+          encrypt_type: 1,
         },
+        file_name: fileName,
+        len: String(uploaded.fileSize),
       },
-    });
-    log(`图片已发送 (id: ${result.messageId})`);
-  } else if (mime.startsWith("video/")) {
-    const uploaded = await uploadVideo(filePath, to, {
-      baseUrl: account.baseUrl,
-      token: account.token,
-    });
-    const result = await sendMediaMessage({
-      baseUrl: account.baseUrl,
-      token: account.token,
-      to,
-      text: caption,
-      contextToken,
-      mediaItem: {
-        type: MessageItemType.VIDEO,
-        video_item: {
-          media: {
-            encrypt_query_param: uploaded.downloadEncryptedQueryParam,
-            aes_key: Buffer.from(uploaded.aeskey, "hex").toString("base64"),
-            encrypt_type: 1,
-          },
-          video_size: uploaded.fileSizeCiphertext,
-        },
-      },
-    });
-    log(`视频已发送 (id: ${result.messageId})`);
-  } else {
-    const uploaded = await uploadFile(filePath, to, {
-      baseUrl: account.baseUrl,
-      token: account.token,
-    });
-    const result = await sendMediaMessage({
-      baseUrl: account.baseUrl,
-      token: account.token,
-      to,
-      text: caption,
-      contextToken,
-      mediaItem: {
-        type: MessageItemType.FILE,
-        file_item: {
-          media: {
-            encrypt_query_param: uploaded.downloadEncryptedQueryParam,
-            aes_key: Buffer.from(uploaded.aeskey, "hex").toString("base64"),
-            encrypt_type: 1,
-          },
-          file_name: fileName,
-          len: String(uploaded.fileSize),
-        },
-      },
-    });
-    log(`文件已发送 (id: ${result.messageId})`);
-  }
+    },
+  });
+  log(`${typeLabel}已发送 (id: ${result.messageId})`);
 }
