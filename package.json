@@ -1,0 +1,45 @@
+{
+  "name": "weixin-claw-cli",
+  "version": "0.1.0",
+  "description": "WeChat CLI messaging tool - send/receive messages, files, and clipboard content via WeChat from your terminal",
+  "type": "module",
+  "license": "MIT",
+  "author": "lolieatapple",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/lolieatapple/weixin-claw-cli.git"
+  },
+  "homepage": "https://github.com/lolieatapple/weixin-claw-cli",
+  "bugs": {
+    "url": "https://github.com/lolieatapple/weixin-claw-cli/issues"
+  },
+  "keywords": [
+    "weixin",
+    "wechat",
+    "cli",
+    "messaging",
+    "chat",
+    "terminal"
+  ],
+  "bin": {
+    "weixin": "./dist/cli.js"
+  },
+  "files": [
+    "dist/"
+  ],
+  "scripts": {
+    "build": "bun build src/cli.ts --outdir dist --target node --format esm --splitting",
+    "dev": "bun run src/cli.ts",
+    "prepublishOnly": "bun run build",
+    "postinstall": "node dist/cli.js help 2>/dev/null || true"
+  },
+  "dependencies": {
+    "qrcode-terminal": "^0.12.0"
+  },
+  "devDependencies": {
+    "bun-types": "latest"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
