@@ -1,4 +1,5 @@
 import crypto from "node:crypto";
+import path from "node:path";
 import type {
   BaseInfo,
   GetUpdatesResp,
@@ -289,6 +290,34 @@ export function extractTextFromMessage(msg: WeixinMessage): string {
     }
   }
   return "";
+}
+
+/** Download media (image/file/video) from a message item, returns decrypted bytes or null */
+export async function downloadMediaFromItem(item: MessageItem): Promise<{ data: Buffer; ext: string } | null> {
+  const { downloadFromCdn, detectImageExt } = await import("./cdn.js");
+
+  if (item.type === MessageItemType.IMAGE && item.image_item) {
+    const img = item.image_item;
+    const data = await downloadFromCdn({
+      media: img.media,
+      aeskey: img.aeskey,
+    });
+    return { data, ext: detectImageExt(data) };
+  }
+
+  if (item.type === MessageItemType.FILE && item.file_item?.media) {
+    const file = item.file_item;
+    const data = await downloadFromCdn({ media: file.media });
+    const ext = file.file_name ? path.extname(file.file_name) || ".bin" : ".bin";
+    return { data, ext };
+  }
+
+  if (item.type === MessageItemType.VIDEO && item.video_item?.media) {
+    const data = await downloadFromCdn({ media: item.video_item.media });
+    return { data, ext: ".mp4" };
+  }
+
+  return null;
 }
 
 export function describeMessageType(msg: WeixinMessage): string {

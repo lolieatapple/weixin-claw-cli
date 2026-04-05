@@ -1,8 +1,9 @@
 import crypto from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
-import { createCipheriv } from "node:crypto";
+import { createCipheriv, createDecipheriv } from "node:crypto";
 import type { ClientOptions } from "./client.js";
+import type { ImageItem, CDNMedia } from "./types.js";
 import { UploadMediaType } from "./types.js";
 
 export const CDN_BASE_URL = "https://novac2c.cdn.weixin.qq.com/c2c";
@@ -270,4 +271,84 @@ const EXTENSION_TO_MIME: Record<string, string> = {
 export function getMimeFromFilename(filename: string): string {
   const ext = path.extname(filename).toLowerCase();
   return EXTENSION_TO_MIME[ext] ?? "application/octet-stream";
+}
+
+// ── AES Key Resolution (matching official SDK) ────────────────────────────
+
+/**
+ * Resolve the 16-byte AES key from image/file item.
+ * Priority: item.aeskey (hex) > item.media.aes_key (base64, possibly hex-inside-base64)
+ */
+export function resolveAesKey(opts: {
+  aeskey?: string;
+  media?: CDNMedia;
+}): Buffer | null {
+  // Priority 1: direct hex-encoded key (e.g., image_item.aeskey)
+  if (opts.aeskey?.trim()) {
+    const key = Buffer.from(opts.aeskey, "hex");
+    if (key.length === 16) return key;
+  }
+
+  // Priority 2: base64-encoded key from media.aes_key
+  const b64Key = opts.media?.aes_key;
+  if (!b64Key?.trim()) return null;
+
+  const decoded = Buffer.from(b64Key, "base64");
+  if (decoded.length === 16) {
+    // Direct 16 raw bytes
+    return decoded;
+  }
+  if (decoded.length === 32 && /^[0-9a-fA-F]{32}$/.test(decoded.toString("ascii"))) {
+    // 32 ASCII hex chars inside base64 → decode again to get 16 bytes
+    return Buffer.from(decoded.toString("ascii"), "hex");
+  }
+
+  return null;
+}
+
+// ── AES-128-ECB Decrypt ───────────────────────────────────────────────────
+
+function decryptAesEcb(ciphertext: Buffer, key: Buffer): Buffer {
+  const decipher = createDecipheriv("aes-128-ecb", key, null);
+  return Buffer.concat([decipher.update(ciphertext), decipher.final()]);
+}
+
+// ── CDN Download ──────────────────────────────────────────────────────────
+
+export async function downloadFromCdn(opts: {
+  media?: CDNMedia;
+  aeskey?: string;
+  cdnBaseUrl?: string;
+}): Promise<Buffer> {
+  const media = opts.media;
+  if (!media?.encrypt_query_param) {
+    throw new Error("No encrypt_query_param in media");
+  }
+
+  const baseUrl = opts.cdnBaseUrl ?? CDN_BASE_URL;
+  const url = `${baseUrl}/download?encrypted_query_param=${encodeURIComponent(media.encrypt_query_param)}`;
+
+  const res = await fetch(url);
+  if (!res.ok) {
+    throw new Error(`CDN download failed: ${res.status} ${res.statusText}`);
+  }
+
+  const raw = Buffer.from(await res.arrayBuffer());
+
+  const key = resolveAesKey({ aeskey: opts.aeskey, media });
+  if (key) {
+    return decryptAesEcb(raw, key);
+  }
+  return raw;
+}
+
+/** Detect image format from magic bytes and return extension */
+export function detectImageExt(data: Buffer): string {
+  if (data.length < 4) return ".bin";
+  if (data[0] === 0xFF && data[1] === 0xD8 && data[2] === 0xFF) return ".jpg";
+  if (data[0] === 0x89 && data[1] === 0x50 && data[2] === 0x4E && data[3] === 0x47) return ".png";
+  if (data[0] === 0x47 && data[1] === 0x49 && data[2] === 0x46) return ".gif";
+  if (data.length >= 12 && data[0] === 0x52 && data[1] === 0x49 && data[8] === 0x57 && data[9] === 0x45) return ".webp";
+  if (data[0] === 0x42 && data[1] === 0x4D) return ".bmp";
+  return ".bin";
 }

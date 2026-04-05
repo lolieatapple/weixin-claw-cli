@@ -1,4 +1,7 @@
-import { getUpdates, extractTextFromMessage, describeMessageType } from "../api/client.js";
+import fs from "node:fs";
+import path from "node:path";
+import { getUpdates, extractTextFromMessage, describeMessageType, downloadMediaFromItem } from "../api/client.js";
+import { MessageItemType } from "../api/types.js";
 import {
   createContextTokenStore,
   loadSyncBuf,
@@ -75,6 +78,28 @@ export async function cmdListen(): Promise<void> {
           console.log(`\x1b[33m[${time}]\x1b[0m \x1b[32m${from}\x1b[0m (${msgType}): ${text}`);
         } else {
           console.log(`\x1b[33m[${time}]\x1b[0m \x1b[32m${from}\x1b[0m [${msgType}]`);
+        }
+
+        // Auto-download media (images, files, videos)
+        for (const item of msg.item_list ?? []) {
+          const isMedia = item.type === MessageItemType.IMAGE
+            || item.type === MessageItemType.FILE
+            || item.type === MessageItemType.VIDEO;
+          if (!isMedia) continue;
+
+          try {
+            const result = await downloadMediaFromItem(item);
+            if (result) {
+              const dir = path.resolve("downloads");
+              if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+              const filename = `${from}_${Date.now()}${result.ext}`;
+              const filepath = path.join(dir, filename);
+              fs.writeFileSync(filepath, result.data);
+              log(`  ↳ 已保存: ${filepath} (${(result.data.length / 1024).toFixed(1)}KB)`);
+            }
+          } catch (err) {
+            error(`  ↳ 媒体下载失败: ${String(err)}`);
+          }
         }
       }
     } catch (err) {
